@@ -6,9 +6,13 @@ import ProjectList from './components/Project.js'
 import NoteList from './components/Note.js'
 import Menu from './components/Menu.js'
 import Footer from './components/Footer.js'
+import LoginForm from './components/Auth.js';
+import Cookies from 'universal-cookie/es6';
 
-const apiUrl = 'http://localhost:8000/api/';
-const getUrl = (name) => `${apiUrl}${name}`;
+const baseUrl = 'http://localhost:8000';
+const apiUrl = `${baseUrl}/api`;
+const getUrl = (path) => `${baseUrl}/${path}/`;
+const getApiUrl = (path) => `${apiUrl}/${path}/`;
 
 const notFound404 = ({location}) => {
     return (
@@ -25,54 +29,100 @@ class App extends React.Component {
         this.state = {
             'user': [],
             'projects': [],
-            'notes': []
+            'notes': [],
+            'token': '',
+            'username': ''
         }
     }
 
-    componentDidMount() {
-        axios
-            .get(getUrl('userinfo'))
-            .then(response => {
-                let user = response.data.results
-                this.setState({
-                    'user': user
-                })
-            })
-            .catch(error => console.log(error));
-
-        axios
-            .get(getUrl('projects'))
-            .then(response => {
-                let projects = response.data.results
-                this.setState({
-                    'projects': projects
-                })
-            })
-            .catch(error => console.log(error))
-
-        axios
-            .get(getUrl('notes'))
-            .then(response => {
-                let notes = response.data.results
-                this.setState({
-                    'notes': notes
-                })
-                console.log(notes)
-            })
-            .catch(error => console.log(error))
-
+    logout() {
+        this.setTokenAndUser('', '');
+        this.setState({
+            'user': [],
+            'projects': [],
+            'notes': []
+        });
     }
+
+    isAuthenticated() {
+        return !!this.state?.token;
+    }
+
+    getHeaders() {
+        let headers = {
+            'Content-Type': 'application/json'
+        }
+        if (this.isAuthenticated()) {
+            headers['Authorization'] = `Token ${this.state.token}`;
+        }
+        return headers;
+    }
+
+    loadData() {
+        if (!this.isAuthenticated()) return;
+        const headers = this.getHeaders();
+        axios.all(
+            [
+                axios.get(getApiUrl('userinfo'), {headers}),
+                axios.get(getApiUrl('projects'), {headers}),
+                axios.get(getApiUrl('notes'), {headers})
+            ]
+        )
+            .then(axios.spread((user, projects, notes) => {
+                this.setState(
+                    {
+                    'user': user.data.results,
+                        'projects': projects.data.results,
+                        'notes': notes.data.results,
+                    }
+                )
+            }))
+            .catch(error => console.error(error));
+    }
+
+    setTokenAndUser(token, username) {
+        const cookies = new Cookies();
+        cookies.set('token', token);
+        cookies.set('username', username);
+        this.setState({token, username}, () => this.loadData());
+    }
+
+    getTokenAndUser(username, password) {
+        axios.post(getUrl('api-token-auth'), {username, password})
+            .then(response => {
+            this.setTokenAndUser(response.data['token'], username);
+            }).catch(err => alert('Invalid login or password'))
+    }
+
+    getTokenAndUserFromStorage() {
+        const cookies = new Cookies();
+        const token = cookies.get('token');
+        const username = cookies.get('username');
+        this.setState({token, username}, () => this.loadData());
+    }
+
+    componentDidMount() {
+        this.getTokenAndUserFromStorage();
+    }
+
+
 
     render() {
         return (
             <Router>
-                <Menu/>
+                <Menu isAuthenticated={this.isAuthenticated()}
+                      logout={() => this.logout()}
+                      username={this.state.username}/>
                 <br/>
                 <Switch>
-                    <Route exact path='/users' component={() => <UserList user={this.state.user} /> }/>
-                    <Route exact path='/projects' component={() => <ProjectList projects={this.state.projects} /> }/>
-                    <Route path='/projects/:projectId' component={() => <NoteList notes={this.state.notes} /> }/>
-                    <Route exact path='/notes' component={() => <NoteList notes={this.state.notes} /> }/>
+                    <Route exact path='/users' component={() => { if (!this.isAuthenticated()) return <Redirect to='/login'/>; return <UserList user={this.state.user} /> } }/>
+                    <Route exact path='/projects' component={() => { if (!this.isAuthenticated()) return <Redirect to='/login'/>; return <ProjectList projects={this.state.projects} /> } }/>
+                    <Route path='/projects/:projectId' component={() => { if (!this.isAuthenticated()) return <Redirect to='/login'/>; return <NoteList notes={this.state.notes} /> } }/>
+                    <Route exact path='/notes' component={() => { if (!this.isAuthenticated()) return <Redirect to='/login'/>; return <NoteList notes={this.state.notes} /> } }/>
+                    <Route exact path='/login' component={() => {
+                        if (this.isAuthenticated()) return <Redirect to='/'/>;
+                        return <LoginForm getToken={(username, password) => this.getTokenAndUser(username, password)}/>
+                    }}/>
                     <Redirect from='/' to='/projects'/>
                     <Route component={notFound404}/>
                 </Switch>
