@@ -5,3 +5,8 @@ class UserInfoModelSerializer(ModelSerializer):
     class Meta:
         model = UserInfo
         fields = ['id', 'username', 'first_name', 'last_name', 'email']
+
+class UserInfoModelSerializerExtended(ModelSerializer):
+    class Meta:
+        model = UserInfo
+        fields = ['id', 'username', 'first_name', 'last_name', 'email', 'is_superuser', 'is_developer']
