@@ -1,0 +1,21 @@
+{
+	allNote {
+    body
+    project {
+      name
+      users {
+        username
+        firstName
+        lastName
+    }
+    }
+  }
+  allProjects {
+    name
+    users {
+      username
+      firstName
+      lastName
+    }
+  }
+}
