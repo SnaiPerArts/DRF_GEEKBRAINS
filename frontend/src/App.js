@@ -8,6 +8,8 @@ import Menu from './components/Menu.js'
 import Footer from './components/Footer.js'
 import LoginForm from './components/Auth.js';
 import Cookies from 'universal-cookie/es6';
+import ProjectForm from './components/ProjectForm.js';
+import NoteForm from "./components/NoteForm.js";
 
 const baseUrl = 'http://localhost:8000';
 const apiUrl = `${baseUrl}/api`;
@@ -71,7 +73,7 @@ class App extends React.Component {
             .then(axios.spread((user, projects, notes) => {
                 this.setState(
                     {
-                    'user': user.data.results,
+                        'user': user.data.results,
                         'projects': projects.data.results,
                         'notes': notes.data.results,
                     }
@@ -105,7 +107,85 @@ class App extends React.Component {
         this.getTokenAndUserFromStorage();
     }
 
+    deleteProject(id) {
+        if (!this.isAuthenticated()) return;
+        const headers = this.getHeaders();
+        axios.delete(getApiUrl(`projects/${id}`), {headers})
+            .then(response => {
+                this.setState({projects: this.state.projects.filter((project) => project.id !== id)})
+            })
+            .catch(error => console.error(error));
+    }
 
+    createProject(props) {
+        if (!this.isAuthenticated()) return;
+        const headers = this.getHeaders();
+        props.users = [props.users,];
+        axios.post(getApiUrl(`projects`), {...props}, {headers})
+            .then(response => {
+                this.setState({projects: [...this.state.projects, response.data]})
+            })
+            .catch(error => console.log(error))
+    }
+
+    deleteNote(id) {
+        if (!this.isAuthenticated()) return;
+        const headers = this.getHeaders();
+        axios.delete(getApiUrl(`notes/${id}`), {headers})
+            .then(response => {
+                this.setState({
+                    notes: this.state.notes.map((note) => {
+                        if (note.id === id) {
+                            note.is_active = false;
+                        }
+                        return note;
+                    })
+                })
+            })
+            .catch(error => console.error(error));
+    }
+
+    restoreNote(id) {
+        const headers = this.getHeaders();
+        axios.patch(getApiUrl(`notes/${id}`), {is_active: true}, {headers})
+            .then(response => {
+                this.setState({
+                    notes: this.state.notes.map((note) => {
+                        if (note.id === id) {
+                            note.is_active = true;
+                        }
+                        return note;
+                    })
+                })
+            })
+            .catch(error => console.error(error));
+    }
+
+    updateNote(id) {
+        this.state.notes.find((note) => {
+            let condition = note.id === id;
+            if (condition) {
+                if (note.is_active) {
+                    this.deleteNote(id);
+                } else {
+                    this.restoreNote(id);
+                }
+            }
+            return condition;
+        });
+    }
+
+    createNote(props) {
+        if (!this.isAuthenticated()) return;
+        const headers = this.getHeaders();
+        props.isActive = true;
+        props.author = this.state.user.find((user) => user.username === this.state.username).id;
+        axios.post(getApiUrl(`notes`), {...props}, {headers})
+            .then(response => {
+                this.setState({notes: [...this.state.notes, response.data]})
+            })
+            .catch(error => console.log(error))
+    }
 
     render() {
         return (
@@ -116,9 +196,14 @@ class App extends React.Component {
                 <br/>
                 <Switch>
                     <Route exact path='/users' component={() => { if (!this.isAuthenticated()) return <Redirect to='/login'/>; return <UserList user={this.state.user} /> } }/>
-                    <Route exact path='/projects' component={() => { if (!this.isAuthenticated()) return <Redirect to='/login'/>; return <ProjectList projects={this.state.projects} /> } }/>
-                    <Route path='/projects/:projectId' component={() => { if (!this.isAuthenticated()) return <Redirect to='/login'/>; return <NoteList notes={this.state.notes} /> } }/>
-                    <Route exact path='/notes' component={() => { if (!this.isAuthenticated()) return <Redirect to='/login'/>; return <NoteList notes={this.state.notes} /> } }/>
+                    <Route exact path='/projects' component={() => { if (!this.isAuthenticated()) return <Redirect to='/login'/>; return <ProjectList users={this.state.user} projects={this.state.projects} deleteProject={(id) => this.deleteProject(id)} /> } }/>
+                    <Route exact path='/projects/create' component={() => { if (!this.isAuthenticated()) return <Redirect to='/login'/>; return <ProjectForm users={this.state.user} createProject={(props) => this.createProject(props)}/>  }}/>
+                    <Route path='/projects/:projectId' component={() => { if (!this.isAuthenticated()) return <Redirect to='/login'/>; return <NoteList projects={this.state.projects} users={this.state.user} notes={this.state.notes} updateNote={(id) => this.updateNote(id)} /> } }/>
+                    <Route exact path='/notes' component={() => { if (!this.isAuthenticated()) return <Redirect to='/login'/>; return <NoteList projects={this.state.projects} users={this.state.user} notes={this.state.notes} updateNote={(id) => this.updateNote(id)} /> } }/>
+                    <Route exact path='/notes/create' component={() => {
+                        return <NoteForm projects={this.state.projects}
+                                         createNote={(props) => this.createNote(props)}/>
+                    }}/>
                     <Route exact path='/login' component={() => {
                         if (this.isAuthenticated()) return <Redirect to='/'/>;
                         return <LoginForm getToken={(username, password) => this.getTokenAndUser(username, password)}/>
